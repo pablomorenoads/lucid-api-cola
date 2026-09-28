@@ -24,31 +24,32 @@ export class Mensajes extends DurableObject {
     return (await this.ctx.storage.get("mensajes")) || [];
   }
 
-async estado() {
-  const mensajes = (await this.ctx.storage.get("mensajes")) || [];
-  const alarma = await this.ctx.storage.getAlarm();
-  const respuesta = await this.ctx.storage.get("respuesta_lista");
+  async estado() {
+    const mensajes = (await this.ctx.storage.get("mensajes")) || [];
+    const alarma = await this.ctx.storage.getAlarm();
+    const respuesta = await this.ctx.storage.get("respuesta_lista");
 
-  return {
-    mensajes,
-    alarma,
-    segundos_restantes: alarma
-      ? Math.max(0, Math.round((alarma - Date.now()) / 1000))
-      : null,
-    respuesta_lista: respuesta || null
-  };
-}
+    return {
+      mensajes,
+      alarma,
+      segundos_restantes: alarma
+        ? Math.max(0, Math.round((alarma - Date.now()) / 1000))
+        : null,
+      respuesta_lista: respuesta || null
+    };
+  }
 
-async alarm() {
-  const mensajes = (await this.ctx.storage.get("mensajes")) || [];
+  async alarm() {
+    const mensajes = (await this.ctx.storage.get("mensajes")) || [];
 
-  const texto = mensajes
-    .map((item, index) => `${index + 1}. ${item.mensaje}`)
-    .join(" | ");
+    const texto = mensajes
+      .map((item, index) => `${index + 1}. ${item.mensaje}`)
+      .join(" | ");
 
-  await this.ctx.storage.put("respuesta_lista", texto);
+    await this.ctx.storage.put("respuesta_lista", texto);
 
-  console.log("RESPUESTA LISTA:", texto);
+    console.log("RESPUESTA LISTA:", texto);
+  }
 }
 
 export default {
@@ -62,10 +63,14 @@ export default {
 
     if (!cliente) {
       return new Response(
-        JSON.stringify({ error: "Falta cliente" }),
+        JSON.stringify({
+          error: "Falta cliente"
+        }),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" }
+          headers: {
+            "Content-Type": "application/json"
+          }
         }
       );
     }
@@ -80,17 +85,23 @@ export default {
       return new Response(
         JSON.stringify(estado),
         {
-          headers: { "Content-Type": "application/json" }
+          headers: {
+            "Content-Type": "application/json"
+          }
         }
       );
     }
 
     if (!mensaje) {
       return new Response(
-        JSON.stringify({ error: "Falta mensaje" }),
+        JSON.stringify({
+          error: "Falta mensaje"
+        }),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" }
+          headers: {
+            "Content-Type": "application/json"
+          }
         }
       );
     }
@@ -99,13 +110,15 @@ export default {
 
     return new Response(
       JSON.stringify({
-        cliente,
+        cliente: cliente,
         cantidad: mensajes.length,
         mensaje_recibido: mensaje,
         espera_segundos: 12
       }),
       {
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          "Content-Type": "application/json"
+        }
       }
     );
   }
