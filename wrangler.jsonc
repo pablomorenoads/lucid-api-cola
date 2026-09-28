@@ -1,0 +1,21 @@
+{
+  "name": "lucid-api-cola",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-28",
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MENSAJES",
+        "class_name": "Mensajes"
+      }
+    ]
+  },
+
+  "exports": {
+    "Mensajes": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
+}
