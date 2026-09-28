@@ -37,14 +37,16 @@ export class Mensajes extends DurableObject {
     };
   }
 
-  async alarm() {
-    const mensajes = (await this.ctx.storage.get("mensajes")) || [];
+async alarm() {
+  const mensajes = (await this.ctx.storage.get("mensajes")) || [];
 
-    // Por ahora solamente marcamos que la cola quedó lista
-    await this.ctx.storage.put("lista_para_responder", true);
+  const texto = mensajes
+    .map((item, index) => `${index + 1}. ${item.mensaje}`)
+    .join(" | ");
 
-    console.log("COLA LISTA PARA RESPONDER:", mensajes);
-  }
+  await this.ctx.storage.put("respuesta_lista", texto);
+
+  console.log("RESPUESTA LISTA:", texto);
 }
 
 export default {
