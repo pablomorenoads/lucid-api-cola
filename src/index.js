@@ -24,18 +24,20 @@ export class Mensajes extends DurableObject {
     return (await this.ctx.storage.get("mensajes")) || [];
   }
 
-  async estado() {
-    const mensajes = (await this.ctx.storage.get("mensajes")) || [];
-    const alarma = await this.ctx.storage.getAlarm();
+async estado() {
+  const mensajes = (await this.ctx.storage.get("mensajes")) || [];
+  const alarma = await this.ctx.storage.getAlarm();
+  const respuesta = await this.ctx.storage.get("respuesta_lista");
 
-    return {
-      mensajes,
-      alarma,
-      segundos_restantes: alarma
-        ? Math.max(0, Math.round((alarma - Date.now()) / 1000))
-        : null
-    };
-  }
+  return {
+    mensajes,
+    alarma,
+    segundos_restantes: alarma
+      ? Math.max(0, Math.round((alarma - Date.now()) / 1000))
+      : null,
+    respuesta_lista: respuesta || null
+  };
+}
 
 async alarm() {
   const mensajes = (await this.ctx.storage.get("mensajes")) || [];
