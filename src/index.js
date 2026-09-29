@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-const TIEMPO_ESPERA = 12000; // 12 segundos
+const TIEMPO_ESPERA = 15000; // 15 segundos
 
 export class Mensajes extends DurableObject {
 
@@ -19,10 +19,10 @@ export class Mensajes extends DurableObject {
 
     await this.ctx.storage.put("mensajes", mensajes);
 
-    // Reiniciamos la alarma
+    // Reiniciamos la alarma cada vez que llega un mensaje
     await this.ctx.storage.setAlarm(Date.now() + TIEMPO_ESPERA);
 
-    // Esperamos 12 segundos
+    // Esperamos 15 segundos
     await new Promise(resolve =>
       setTimeout(resolve, TIEMPO_ESPERA)
     );
@@ -30,11 +30,11 @@ export class Mensajes extends DurableObject {
     // Volvemos a leer los mensajes
     mensajes = (await this.ctx.storage.get("mensajes")) || [];
 
-    // El último mensaje actualmente guardado
+    // Obtenemos el último mensaje actualmente guardado
     const ultimoMensaje = mensajes[mensajes.length - 1];
 
     // Si llegó otro mensaje después de este,
-    // esta ejecución NO debe responder.
+    // esta ejecución no debe responder.
     if (!ultimoMensaje || ultimoMensaje.id !== idMensaje) {
 
       return {
@@ -44,7 +44,7 @@ export class Mensajes extends DurableObject {
     }
 
     // Esta es la última ejecución.
-    // Puede responder con toda la conversación agrupada.
+    // Puede responder con todos los mensajes agrupados.
     const texto = mensajes
       .map(item => item.mensaje)
       .join(" | ");
@@ -61,6 +61,7 @@ export class Mensajes extends DurableObject {
   }
 
   async estado() {
+
     const mensajes = (await this.ctx.storage.get("mensajes")) || [];
     const alarma = await this.ctx.storage.getAlarm();
 
@@ -74,6 +75,7 @@ export class Mensajes extends DurableObject {
   }
 
   async alarm() {
+
     const mensajes = (await this.ctx.storage.get("mensajes")) || [];
 
     const texto = mensajes
@@ -87,6 +89,7 @@ export class Mensajes extends DurableObject {
 }
 
 export default {
+
   async fetch(request, env) {
 
     const url = new URL(request.url);
@@ -96,6 +99,7 @@ export default {
     const modo = url.searchParams.get("modo");
 
     if (!cliente) {
+
       return new Response(
         JSON.stringify({
           error: "Falta cliente"
@@ -112,12 +116,12 @@ export default {
     const id = env.MENSAJES.idFromName(cliente);
     const stub = env.MENSAJES.get(id);
 
-    // NUEVO MODO:
-    // recibe el mensaje, espera 12 segundos
-    // y determina si esta ejecución debe responder.
+    // Recibir mensaje, esperar 15 segundos
+    // y determinar si esta ejecución debe responder.
     if (modo === "esperar") {
 
       if (!mensaje) {
+
         return new Response(
           JSON.stringify({
             error: "Falta mensaje"
