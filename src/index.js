@@ -8,9 +8,10 @@ export class Mensajes extends DurableObject {
 
     let mensajes = (await this.ctx.storage.get("mensajes")) || [];
 
-    // Guardamos el mensaje
+    // Identificador único para esta ejecución
     const idMensaje = Date.now();
 
+    // Guardamos el mensaje
     mensajes.push({
       id: idMensaje,
       mensaje: mensaje,
@@ -19,7 +20,7 @@ export class Mensajes extends DurableObject {
 
     await this.ctx.storage.put("mensajes", mensajes);
 
-    // Reiniciamos la alarma cada vez que llega un mensaje
+    // Reiniciamos la alarma
     await this.ctx.storage.setAlarm(Date.now() + TIEMPO_ESPERA);
 
     // Esperamos 15 segundos
@@ -27,14 +28,14 @@ export class Mensajes extends DurableObject {
       setTimeout(resolve, TIEMPO_ESPERA)
     );
 
-    // Volvemos a leer los mensajes
+    // Volvemos a leer la cola
     mensajes = (await this.ctx.storage.get("mensajes")) || [];
 
-    // Obtenemos el último mensaje actualmente guardado
+    // Último mensaje actualmente almacenado
     const ultimoMensaje = mensajes[mensajes.length - 1];
 
     // Si llegó otro mensaje después de este,
-    // esta ejecución no debe responder.
+    // esta ejecución NO debe responder.
     if (!ultimoMensaje || ultimoMensaje.id !== idMensaje) {
 
       return {
@@ -43,48 +44,107 @@ export class Mensajes extends DurableObject {
       };
     }
 
-    // Esta es la última ejecución.
-    // Puede responder con todos los mensajes agrupados.
-    const texto = mensajes
+    // -----------------------------------------
+    // ESTA ES LA ÚLTIMA EJECUCIÓN
+    // -----------------------------------------
+
+    // Guardamos una copia del grupo que vamos a responder
+    const grupo = [...mensajes];
+
+    // Construimos el texto agrupado
+    const texto = grupo
       .map(item => item.mensaje)
       .join(" | ");
 
+    // IMPORTANTE:
+    // Eliminamos solamente los mensajes que pertenecen
+    // al grupo que acabamos de procesar.
+    //
+    // Si mientras tanto apareció un mensaje nuevo,
+    // se conserva.
+    const mensajesNuevos = mensajes.filter(
+      item => item.id > idMensaje
+    );
+
+    await this.ctx.storage.put(
+      "mensajes",
+      mensajesNuevos
+    );
+
+    // Limpiamos la respuesta anterior
+    await this.ctx.storage.delete("respuesta_lista");
+
+    // Guardamos la respuesta actual por si queremos
+    // consultarla posteriormente
+    await this.ctx.storage.put(
+      "respuesta_lista",
+      texto
+    );
+
+    // Ya no necesitamos la alarma de este grupo
+    await this.ctx.storage.deleteAlarm();
+
     return {
       responder: true,
-      mensajes: mensajes,
+      mensajes: grupo,
       respuesta: texto
     };
   }
 
   async obtenerRespuesta() {
-    return await this.ctx.storage.get("respuesta_lista") || null;
+
+    return await this.ctx.storage.get(
+      "respuesta_lista"
+    ) || null;
   }
 
   async estado() {
 
-    const mensajes = (await this.ctx.storage.get("mensajes")) || [];
-    const alarma = await this.ctx.storage.getAlarm();
+    const mensajes =
+      (await this.ctx.storage.get("mensajes")) || [];
+
+    const alarma =
+      await this.ctx.storage.getAlarm();
 
     return {
       mensajes,
       alarma,
       segundos_restantes: alarma
-        ? Math.max(0, Math.round((alarma - Date.now()) / 1000))
+        ? Math.max(
+            0,
+            Math.round(
+              (alarma - Date.now()) / 1000
+            )
+          )
         : null
     };
   }
 
   async alarm() {
 
-    const mensajes = (await this.ctx.storage.get("mensajes")) || [];
+    const mensajes =
+      (await this.ctx.storage.get("mensajes")) || [];
+
+    if (mensajes.length === 0) {
+      return;
+    }
 
     const texto = mensajes
-      .map((item, index) => `${index + 1}. ${item.mensaje}`)
+      .map(
+        (item, index) =>
+          `${index + 1}. ${item.mensaje}`
+      )
       .join(" | ");
 
-    await this.ctx.storage.put("respuesta_lista", texto);
+    await this.ctx.storage.put(
+      "respuesta_lista",
+      texto
+    );
 
-    console.log("RESPUESTA LISTA:", texto);
+    console.log(
+      "RESPUESTA LISTA:",
+      texto
+    );
   }
 }
 
@@ -94,9 +154,14 @@ export default {
 
     const url = new URL(request.url);
 
-    const cliente = url.searchParams.get("cliente");
-    const mensaje = url.searchParams.get("mensaje");
-    const modo = url.searchParams.get("modo");
+    const cliente =
+      url.searchParams.get("cliente");
+
+    const mensaje =
+      url.searchParams.get("mensaje");
+
+    const modo =
+      url.searchParams.get("modo");
 
     if (!cliente) {
 
@@ -113,11 +178,17 @@ export default {
       );
     }
 
-    const id = env.MENSAJES.idFromName(cliente);
-    const stub = env.MENSAJES.get(id);
+    // Cada cliente tiene su propia cola
+    const id =
+      env.MENSAJES.idFromName(cliente);
 
-    // Recibir mensaje, esperar 15 segundos
-    // y determinar si esta ejecución debe responder.
+    const stub =
+      env.MENSAJES.get(id);
+
+    // -----------------------------------------
+    // RECIBIR MENSAJE Y ESPERAR
+    // -----------------------------------------
+
     if (modo === "esperar") {
 
       if (!mensaje) {
@@ -135,7 +206,8 @@ export default {
         );
       }
 
-      const resultado = await stub.agregarYEsperar(mensaje);
+      const resultado =
+        await stub.agregarYEsperar(mensaje);
 
       return new Response(
         JSON.stringify(resultado),
@@ -147,10 +219,14 @@ export default {
       );
     }
 
-    // Consultar respuesta anterior
+    // -----------------------------------------
+    // CONSULTAR RESPUESTA
+    // -----------------------------------------
+
     if (modo === "respuesta") {
 
-      const respuesta = await stub.obtenerRespuesta();
+      const respuesta =
+        await stub.obtenerRespuesta();
 
       return new Response(
         JSON.stringify({
@@ -164,10 +240,14 @@ export default {
       );
     }
 
-    // Consultar estado
+    // -----------------------------------------
+    // CONSULTAR ESTADO
+    // -----------------------------------------
+
     if (modo === "estado") {
 
-      const estado = await stub.estado();
+      const estado =
+        await stub.estado();
 
       return new Response(
         JSON.stringify(estado),
