@@ -20,8 +20,10 @@ export class Mensajes extends DurableObject {
     return mensajes;
   }
 
-  async obtener() {
-    return (await this.ctx.storage.get("mensajes")) || [];
+  async obtenerRespuesta() {
+    const respuesta = await this.ctx.storage.get("respuesta_lista");
+
+    return respuesta || null;
   }
 
   async estado() {
@@ -78,8 +80,26 @@ export default {
     const id = env.MENSAJES.idFromName(cliente);
     const stub = env.MENSAJES.get(id);
 
-    // Consultar estado de la cola
+    // Consultar respuesta agrupada
+    if (consultar === "respuesta") {
+
+      const respuesta = await stub.obtenerRespuesta();
+
+      return new Response(
+        JSON.stringify({
+          respuesta: respuesta
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    }
+
+    // Consultar estado completo
     if (consultar === "1") {
+
       const estado = await stub.estado();
 
       return new Response(
