@@ -4,40 +4,72 @@ const TIEMPO_ESPERA = 12000; // 12 segundos
 
 export class Mensajes extends DurableObject {
 
-  async agregar(mensaje) {
+  async agregarYEsperar(mensaje) {
+
     let mensajes = (await this.ctx.storage.get("mensajes")) || [];
 
+    // Guardamos el mensaje
+    const idMensaje = Date.now();
+
     mensajes.push({
+      id: idMensaje,
       mensaje: mensaje,
       fecha: new Date().toISOString()
     });
 
     await this.ctx.storage.put("mensajes", mensajes);
 
-    // Reinicia el contador cada vez que llega un mensaje
+    // Reiniciamos la alarma
     await this.ctx.storage.setAlarm(Date.now() + TIEMPO_ESPERA);
 
-    return mensajes;
+    // Esperamos 12 segundos
+    await new Promise(resolve =>
+      setTimeout(resolve, TIEMPO_ESPERA)
+    );
+
+    // Volvemos a leer los mensajes
+    mensajes = (await this.ctx.storage.get("mensajes")) || [];
+
+    // El último mensaje actualmente guardado
+    const ultimoMensaje = mensajes[mensajes.length - 1];
+
+    // Si llegó otro mensaje después de este,
+    // esta ejecución NO debe responder.
+    if (!ultimoMensaje || ultimoMensaje.id !== idMensaje) {
+
+      return {
+        responder: false,
+        mensajes: []
+      };
+    }
+
+    // Esta es la última ejecución.
+    // Puede responder con toda la conversación agrupada.
+    const texto = mensajes
+      .map(item => item.mensaje)
+      .join(" | ");
+
+    return {
+      responder: true,
+      mensajes: mensajes,
+      respuesta: texto
+    };
   }
 
   async obtenerRespuesta() {
-    const respuesta = await this.ctx.storage.get("respuesta_lista");
-
-    return respuesta || null;
+    return await this.ctx.storage.get("respuesta_lista") || null;
   }
 
   async estado() {
     const mensajes = (await this.ctx.storage.get("mensajes")) || [];
     const alarma = await this.ctx.storage.getAlarm();
-    const respuesta = await this.ctx.storage.get("respuesta_lista");
 
     return {
       mensajes,
       alarma,
       segundos_restantes: alarma
         ? Math.max(0, Math.round((alarma - Date.now()) / 1000))
-        : null,
-      respuesta_lista: respuesta || null
+        : null
     };
   }
 
@@ -61,7 +93,7 @@ export default {
 
     const cliente = url.searchParams.get("cliente");
     const mensaje = url.searchParams.get("mensaje");
-    const consultar = url.searchParams.get("consultar");
+    const modo = url.searchParams.get("modo");
 
     if (!cliente) {
       return new Response(
@@ -80,8 +112,39 @@ export default {
     const id = env.MENSAJES.idFromName(cliente);
     const stub = env.MENSAJES.get(id);
 
-    // Consultar respuesta agrupada
-    if (consultar === "respuesta") {
+    // NUEVO MODO:
+    // recibe el mensaje, espera 12 segundos
+    // y determina si esta ejecución debe responder.
+    if (modo === "esperar") {
+
+      if (!mensaje) {
+        return new Response(
+          JSON.stringify({
+            error: "Falta mensaje"
+          }),
+          {
+            status: 400,
+            headers: {
+              "Content-Type": "application/json"
+            }
+          }
+        );
+      }
+
+      const resultado = await stub.agregarYEsperar(mensaje);
+
+      return new Response(
+        JSON.stringify(resultado),
+        {
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    }
+
+    // Consultar respuesta anterior
+    if (modo === "respuesta") {
 
       const respuesta = await stub.obtenerRespuesta();
 
@@ -97,8 +160,8 @@ export default {
       );
     }
 
-    // Consultar estado completo
-    if (consultar === "1") {
+    // Consultar estado
+    if (modo === "estado") {
 
       const estado = await stub.estado();
 
@@ -112,30 +175,12 @@ export default {
       );
     }
 
-    if (!mensaje) {
-      return new Response(
-        JSON.stringify({
-          error: "Falta mensaje"
-        }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        }
-      );
-    }
-
-    const mensajes = await stub.agregar(mensaje);
-
     return new Response(
       JSON.stringify({
-        cliente: cliente,
-        cantidad: mensajes.length,
-        mensaje_recibido: mensaje,
-        espera_segundos: 12
+        error: "Modo no especificado"
       }),
       {
+        status: 400,
         headers: {
           "Content-Type": "application/json"
         }
